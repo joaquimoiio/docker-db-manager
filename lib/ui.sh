@@ -10,13 +10,20 @@ _DBM_UI_LOADED=1
 : "${_DBM_CORE_LOADED:?source lib/core.sh first}"
 
 # ─── Util: largura visível (descarta ANSI) ───────────────────────────────────
+# Implementação puramente em bash (sem fork de sed) — milhares de chamadas/render.
 ui::_strip_ansi() {
-    # remove sequências CSI (ESC[...letra)
-    printf '%s' "$1" | sed $'s/\x1b\\[[0-9;]*[a-zA-Z]//g'
+    local s=$1 re=$'\x1b\\[[0-9;]*[a-zA-Z]'
+    while [[ "$s" =~ $re ]]; do
+        s="${s/${BASH_REMATCH[0]}/}"
+    done
+    printf '%s' "$s"
 }
 
 ui::_visible_len() {
-    local s; s=$(ui::_strip_ansi "$1")
+    local s=$1 re=$'\x1b\\[[0-9;]*[a-zA-Z]'
+    while [[ "$s" =~ $re ]]; do
+        s="${s/${BASH_REMATCH[0]}/}"
+    done
     printf '%d' "${#s}"
 }
 
@@ -69,15 +76,15 @@ section() { ui::section "$1"; }
 sep()     { ui::hr; }
 
 # ─── Pílula de status (uma linha, com cor) ───────────────────────────────────
+# Usa o cache do docker.sh para evitar dois fork-execs de `docker ps` por render.
 ui::status_pill() {
-    local name=$1
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$name"; then
-        printf '%s%s%s rodando%s'    "$CLR_OK"   "$BOLD" "$GLYPH_DOT"    "$NC"
-    elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$name"; then
-        printf '%s%s%s parado%s'     "$CLR_WARN" "$BOLD" "$GLYPH_SQUARE" "$NC"
-    else
-        printf '%s%s%s ausente%s'    "$DIM$CLR_MUTED" "$BOLD" "$GLYPH_RING" "$NC"
-    fi
+    local name=$1 state
+    state=$(docker::state "$name")
+    case "$state" in
+        running)               printf '%s%s%s rodando%s' "$CLR_OK"        "$BOLD" "$GLYPH_DOT"    "$NC" ;;
+        exited|created|paused) printf '%s%s%s parado%s'  "$CLR_WARN"      "$BOLD" "$GLYPH_SQUARE" "$NC" ;;
+        *)                     printf '%s%s%s ausente%s' "$DIM$CLR_MUTED" "$BOLD" "$GLYPH_RING"   "$NC" ;;
+    esac
 }
 status_pill() { ui::status_pill "$1"; }
 
@@ -243,7 +250,7 @@ ui::titlebar() {
     printf '\n  %s%s%s\n\n' "$CLR_ACCENT2" "$tline" "$NC"
 }
 
-# Header colorido por banco (substitui ascii art individual de cada DB)
+# Header colorido por banco — versão compacta (uma linha).
 ui::db_header() {
     local db=$1 ctx=${2:-}
     local label color glyph
@@ -258,6 +265,22 @@ ui::db_header() {
     printf '  %s%s %s%s   %s%s%s' "$BOLD$color" "$glyph" "$label" "$NC" "$DIM$CLR_MUTED" "$tagline" "$NC"
     [[ -n "$ctx" ]] && printf '   %s· %s%s' "$DIM$CLR_MUTED" "$ctx" "$NC"
     printf '\n  %s%s%s\n\n' "$color" "$tline" "$NC"
+}
+
+# Banner grande por banco — ASCII art na cor do banco + tagline.
+# Usado ao entrar em qualquer view de banco (manage, logs, lifecycle...).
+ui::db_banner() {
+    local db=$1 ctx=${2:-}
+    local label color tagline
+    label=$(core::db_config "$db" LABEL)
+    color=$(db_color "$db")
+    tagline=$(core::db_config "$db" TAGLINE)
+
+    printf '\n'
+    db_banner "$db"
+    printf '\n  %s%s%s  %s%s%s' "$BOLD$color" "$label" "$NC" "$DIM$CLR_MUTED" "$tagline" "$NC"
+    [[ -n "$ctx" ]] && printf '  %s· %s%s' "$DIM$CLR_MUTED" "$ctx" "$NC"
+    printf '\n\n'
 }
 
 # ─── Pause / prompt simples ──────────────────────────────────────────────────

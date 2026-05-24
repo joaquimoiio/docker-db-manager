@@ -28,7 +28,7 @@ mysql_show_credentials() {
 
 mysql_shell_cmd() {
     docker exec -it "$MYSQL_CONTAINER" \
-        mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DB"
+        mysql -u root -p"$MYSQL_ROOT_PASSWORD"
 }
 
 mysql_exec() {

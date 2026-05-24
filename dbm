@@ -8,10 +8,7 @@
 #   lib/input.sh        leitura de input (single-key, prompts, fzf opcional)
 #   lib/docker.sh       wrappers e cache de docker ps/stats
 #   lib/lifecycle.sh    start/stop/restart/delete/exec
-#   lib/logs.sh         logs (tail + follow)
-#   lib/stats.sh        view de CPU/MEM
-#   lib/volumes.sh      volumes
-#   lib/networks.sh     networks
+#   lib/logs.sh         logs (tail)
 #   lib/manage.sh       menu de gerenciamento (bancos · usuários · restore)
 #   lib/dashboard.sh    view principal interativa
 #   databases/_common.sh
@@ -34,9 +31,6 @@ source "$DBM_ROOT/lib/input.sh"
 source "$DBM_ROOT/lib/docker.sh"
 source "$DBM_ROOT/lib/lifecycle.sh"
 source "$DBM_ROOT/lib/logs.sh"
-source "$DBM_ROOT/lib/stats.sh"
-source "$DBM_ROOT/lib/volumes.sh"
-source "$DBM_ROOT/lib/networks.sh"
 source "$DBM_ROOT/lib/manage.sh"
 source "$DBM_ROOT/lib/dashboard.sh"
 
@@ -89,16 +83,8 @@ usage() {
     ${CLR_OK}start${NC}    <banco>              iniciar container
     ${CLR_WARN}stop${NC}     <banco>              parar
     ${CLR_INFO}restart${NC}  <banco>              reiniciar
-    ${CLR_ERR}delete${NC}   <banco>              remover (destrutivo)
     ${CLR_ACCENT}logs${NC}     <banco> [N=50]      últimas N linhas
-    ${CLR_ACCENT}follow${NC}   <banco>              follow logs (Ctrl-C sai)
     ${CLR_ACCENT}exec${NC}     <banco>              abrir cliente do banco (psql/mysql/...)
-
-  ${BOLD}${CLR_FG}DOCKER GERAL${NC}
-    ${CLR_ACCENT}status${NC}                          tabela com status de todos
-    ${CLR_ACCENT}stats${NC}                           snapshot de CPU/MEM
-    ${CLR_ACCENT}volumes${NC}                         listar volumes
-    ${CLR_ACCENT}networks${NC}                        listar networks
 
   ${BOLD}${CLR_FG}BANCOS DISPONÍVEIS${NC}
 EOF
@@ -121,31 +107,6 @@ EOF
 EOF
 }
 
-# Ação "status" simplificada para CLI (não abre dashboard)
-cli_status() {
-    ui::titlebar "Status dos containers" "snapshot"
-    ui::table_header "BANCO" 14 "STATUS" 14 "PORTA" 9 "CONTAINER" 24
-    local db name port label color state pill
-    for db in "${DB_TYPES[@]}"; do
-        name=$(core::db_config "$db" CONTAINER)
-        port=$(core::db_config "$db" PORT)
-        label=$(core::db_config "$db" LABEL)
-        color=$(db_color "$db")
-        state=$(docker::state "$name")
-        case "$state" in
-            running) pill="${CLR_OK}${BOLD}${GLYPH_DOT} rodando${NC}" ;;
-            exited|created|paused) pill="${CLR_WARN}${BOLD}${GLYPH_SQUARE} parado${NC}" ;;
-            *) pill="${DIM}${CLR_MUTED}${GLYPH_RING} ausente${NC}" ;;
-        esac
-        ui::table_row \
-            "${color}${BOLD}${label}${NC}" 14 \
-            "$pill" 14 \
-            "${CLR_FG}:${port}${NC}" 9 \
-            "${CLR_FG}$name${NC}" 24
-    done
-    printf '\n'
-}
-
 main() {
     # Sem args → dashboard interativo
     if (( $# == 0 )); then
@@ -159,19 +120,7 @@ main() {
         -h|--help|help)
             usage
             ;;
-        status)
-            cli_status
-            ;;
-        stats)
-            stats::view
-            ;;
-        volumes)
-            volumes::list
-            ;;
-        networks)
-            networks::list
-            ;;
-        start|stop|restart|delete|exec)
+        start|stop|restart|exec)
             local db=${1:-}
             if ! is_known_db "$db"; then
                 ui::error "Banco desconhecido: '${db:-vazio}'. Use: ${DB_TYPES[*]}"
@@ -181,7 +130,6 @@ main() {
                 start)   lifecycle::start   "$db" ;;
                 stop)    lifecycle::stop    "$db" ;;
                 restart) lifecycle::restart "$db" ;;
-                delete)  lifecycle::delete  "$db" ;;
                 exec)    lifecycle::exec    "$db" ;;
             esac
             ;;
@@ -189,11 +137,6 @@ main() {
             local db=${1:-} n=${2:-50}
             is_known_db "$db" || { ui::error "Banco desconhecido: '${db:-vazio}'."; exit 2; }
             logs::tail "$db" "$n"
-            ;;
-        follow)
-            local db=${1:-}
-            is_known_db "$db" || { ui::error "Banco desconhecido: '${db:-vazio}'."; exit 2; }
-            logs::follow "$db"
             ;;
         *)
             ui::error "Ação inválida: '$action'"

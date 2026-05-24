@@ -21,10 +21,30 @@ DBM_USER_CFG="$DBM_USER_CFG_DIR/config.sh"
 
 # ─── Capacidades do terminal ─────────────────────────────────────────────────
 core::is_tty()       { [[ -t 1 ]]; }
-core::term_cols()    { tput cols 2>/dev/null || printf 80; }
-core::term_lines()   { tput lines 2>/dev/null || printf 24; }
 core::has_color()    { [[ -t 1 && "${TERM:-}" != "dumb" ]]; }
 core::has_truecolor(){ [[ "${COLORTERM:-}" =~ ^(truecolor|24bit)$ ]]; }
+
+# Tamanho do terminal: cacheado para evitar fork(tput) em cada chamada.
+# Atualiza em SIGWINCH (resize) e pode ser invalidado com core::term_invalidate.
+_CORE_TERM_COLS=0
+_CORE_TERM_LINES=0
+core::_refresh_term() {
+    _CORE_TERM_COLS=${COLUMNS:-0}
+    _CORE_TERM_LINES=${LINES:-0}
+    if (( _CORE_TERM_COLS == 0 )) || (( _CORE_TERM_LINES == 0 )); then
+        # Usa stty (geralmente mais rápido que tput em bash interativo)
+        local size
+        size=$(stty size 2>/dev/null) || size="24 80"
+        _CORE_TERM_LINES=${size% *}
+        _CORE_TERM_COLS=${size#* }
+    fi
+    (( _CORE_TERM_COLS > 0 )) || _CORE_TERM_COLS=80
+    (( _CORE_TERM_LINES > 0 )) || _CORE_TERM_LINES=24
+}
+core::term_invalidate() { _CORE_TERM_COLS=0; _CORE_TERM_LINES=0; }
+core::term_cols()  { (( _CORE_TERM_COLS == 0 )) && core::_refresh_term; printf '%d' "$_CORE_TERM_COLS"; }
+core::term_lines() { (( _CORE_TERM_LINES == 0 )) && core::_refresh_term; printf '%d' "$_CORE_TERM_LINES"; }
+trap 'core::term_invalidate' WINCH
 
 # Animações: desligadas em pipe, em CI, ou via DBM_NO_ANIM=1
 core::anim_enabled() {

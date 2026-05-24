@@ -9,14 +9,17 @@ _DBM_DOCKER_LOADED=1
 : "${_DBM_CORE_LOADED:?source lib/core.sh first}"
 
 # ─── Cache de `docker ps -a` ─────────────────────────────────────────────────
+# ps é rápido (<200ms) — TTL curto. stats é lento (1-2s) — TTL bem maior, com
+# refresh assíncrono para não bloquear a UI.
 _DOCK_PS_TS=0
 _DOCK_PS_DATA=""
-_DOCK_CACHE_TTL=${DBM_CACHE_TTL:-2}
+_DOCK_PS_TTL=${DBM_PS_TTL:-${DBM_CACHE_TTL:-2}}
+_DOCK_STATS_TTL=${DBM_STATS_TTL:-8}
 
 # Formato: NAME|STATE|STATUS|PORTS
 docker::ps_cached() {
     local now; now=$(date +%s)
-    if (( now - _DOCK_PS_TS >= _DOCK_CACHE_TTL )); then
+    if (( now - _DOCK_PS_TS >= _DOCK_PS_TTL )); then
         _DOCK_PS_DATA=$(docker ps -a --format '{{.Names}}|{{.State}}|{{.Status}}|{{.Ports}}' 2>/dev/null || true)
         _DOCK_PS_TS=$now
     fi
@@ -42,30 +45,51 @@ container_exists()  { docker::exists  "$1"; }
 container_running() { docker::running "$1"; }
 
 # ─── Stats (CPU/MEM) ─────────────────────────────────────────────────────────
-# docker::stats NAME → "CPU%|MEM" (vazio se não rodando)
-# Cacheia em batch a cada TTL — uma chamada cobre todos os containers.
+# docker stats --no-stream é lento (~1-2s). Para não travar a UI a cada redraw,
+# disparamos a coleta em background; o próximo redraw consome o resultado.
+# DBM_NO_STATS=1 desliga a coleta (CPU/MEM aparecem como "—").
 _DOCK_STATS_TS=0
+_DOCK_STATS_PID=0
+_DOCK_STATS_FILE="${TMPDIR:-/tmp}/dbm-stats-$$"
 declare -gA _DOCK_STATS_MAP=()
 
-docker::_refresh_stats() {
-    local now; now=$(date +%s)
-    (( now - _DOCK_STATS_TS < _DOCK_CACHE_TTL )) && return
-    _DOCK_STATS_TS=$now
+docker::_stats_ingest() {
+    [[ -s "$_DOCK_STATS_FILE" ]] || return 0
     _DOCK_STATS_MAP=()
-    local raw line name cpu mem
-    raw=$(docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' 2>/dev/null || true)
+    local name cpu mem memshort
     while IFS='|' read -r name cpu mem; do
         [[ -z "$name" ]] && continue
-        # mem vem como "180MiB / 1.94GiB" — pegamos só o lado esquerdo
-        local memshort="${mem%% / *}"
+        memshort="${mem%% / *}"
         _DOCK_STATS_MAP[$name]="${cpu}|${memshort}"
-    done <<<"$raw"
+    done < "$_DOCK_STATS_FILE"
 }
 
-docker::stats() {
-    docker::_refresh_stats
-    printf '%s' "${_DOCK_STATS_MAP[$1]:-}"
+docker::_refresh_stats() {
+    [[ "${DBM_NO_STATS:-0}" = "1" ]] && return
+    local now; now=$(date +%s)
+
+    # Background terminou? Recolhe o arquivo.
+    if (( _DOCK_STATS_PID > 0 )) && ! kill -0 "$_DOCK_STATS_PID" 2>/dev/null; then
+        docker::_stats_ingest
+        _DOCK_STATS_PID=0
+    fi
+
+    # TTL ainda válido ou já tem job rodando? Não dispara outro.
+    (( now - _DOCK_STATS_TS < _DOCK_STATS_TTL )) && return
+    (( _DOCK_STATS_PID > 0 )) && return
+
+    _DOCK_STATS_TS=$now
+    ( docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' \
+        >"$_DOCK_STATS_FILE" 2>/dev/null ) &
+    _DOCK_STATS_PID=$!
 }
+
+# Limpeza do arquivo temporário
+docker::_cleanup() {
+    [[ -f "$_DOCK_STATS_FILE" ]] && rm -f "$_DOCK_STATS_FILE"
+    (( _DOCK_STATS_PID > 0 )) && kill -0 "$_DOCK_STATS_PID" 2>/dev/null && kill "$_DOCK_STATS_PID" 2>/dev/null
+}
+trap 'docker::_cleanup' EXIT
 
 # ─── Helpers de portas ───────────────────────────────────────────────────────
 # Detecta se uma porta TCP no host está ocupada por OUTRO processo
