@@ -6,7 +6,7 @@ Um dashboard estilo `lazydocker`, escrito em Bash puro, para subir, parar, conec
 
 ```
   ╔══════════════════════════════════╗
-  ║          DB Manager Docker        ║
+  ║          DB Manager Docker       ║
   ╚══════════════════════════════════╝
    BANCO         STATUS        CPU      MEM         PORTA    CONTAINER
  ▶ postgres      ● rodando     0.4%     54MB        :5432    postgres-dev
