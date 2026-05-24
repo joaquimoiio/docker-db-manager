@@ -70,15 +70,102 @@ core::altscreen_on()  { core::anim_enabled && printf '\033[?1049h'; }
 core::altscreen_off() { core::anim_enabled && printf '\033[?1049l'; }
 
 # ─── Pré-flight ──────────────────────────────────────────────────────────────
+# Tenta subir o daemon do Docker conforme o SO e o contexto ativo do CLI.
+# Retorna 0 se disparou o start (não garante que o daemon já respondeu).
+# Ecoa em DBM_STARTED_LABEL um rótulo amigável do que foi iniciado.
+core::_start_docker_daemon() {
+    local ctx; ctx=$(docker context show 2>/dev/null)
+    DBM_STARTED_LABEL=""
+    case "$(uname -s)" in
+        Linux)
+            # Contexto do Docker Desktop → unit systemd --user (sem sudo)
+            if [[ "$ctx" == "desktop-linux" ]]; then
+                if core::has_cmd systemctl \
+                    && systemctl --user list-unit-files docker-desktop.service >/dev/null 2>&1; then
+                    DBM_STARTED_LABEL="Docker Desktop"
+                    systemctl --user start docker-desktop && return 0
+                fi
+                return 1
+            fi
+            # Engine systemd padrão → precisa sudo (regra em /etc/sudoers.d/dbm-docker)
+            if core::has_cmd systemctl; then
+                DBM_STARTED_LABEL="Docker Engine"
+                sudo systemctl start docker && return 0
+            elif core::has_cmd service; then
+                DBM_STARTED_LABEL="Docker Engine"
+                sudo service docker start && return 0
+            fi
+            ;;
+        Darwin)
+            if core::has_cmd open; then
+                DBM_STARTED_LABEL="Docker Desktop"
+                open --background -a Docker && return 0
+            fi
+            ;;
+    esac
+    return 1
+}
+
+# Tenta achar outro contexto cujo daemon responda. Útil quando o CLI aponta
+# pro socket do Docker Desktop (parado) mas o engine systemd está OK.
+# Em caso de sucesso: ecoa o nome do contexto e retorna 0.
+core::_find_working_context() {
+    local current other
+    current=$(docker context show 2>/dev/null)
+    while IFS= read -r other; do
+        [[ -z "$other" || "$other" == "$current" ]] && continue
+        if DOCKER_CONTEXT="$other" docker info >/dev/null 2>&1; then
+            printf '%s' "$other"
+            return 0
+        fi
+    done < <(docker context ls --format '{{.Name}}' 2>/dev/null)
+    return 1
+}
+
 core::require_docker() {
     if ! core::has_cmd docker; then
         printf '\n  \033[38;5;203m✖\033[0m  docker não encontrado no PATH.\n\n' >&2
         exit 127
     fi
-    if ! docker info >/dev/null 2>&1; then
-        printf '\n  \033[38;5;203m✖\033[0m  daemon do Docker inacessível. Suba o serviço primeiro.\n\n' >&2
+    if docker info >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Antes de mexer no daemon: pode ser só contexto errado (Desktop parado).
+    local alt
+    if alt=$(core::_find_working_context); then
+        local cur; cur=$(docker context show 2>/dev/null)
+        printf '\n  \033[38;5;179m⚠\033[0m  contexto ativo "%s" não responde, mas "%s" sim.\n' "$cur" "$alt" >&2
+        printf '      Troque com:  \033[1mdocker context use %s\033[0m\n' "$alt" >&2
+        printf '      ou rode o dashboard e tecle \033[1mc\033[0m para escolher.\n\n' >&2
         exit 1
     fi
+
+    printf '\n  \033[38;5;179m⟳\033[0m  daemon do Docker inacessível — tentando iniciar...\n' >&2
+    if ! core::_start_docker_daemon 2>/dev/null; then
+        printf '\n  \033[38;5;203m✖\033[0m  Não foi possível iniciar o serviço do Docker. Suba manualmente e tente de novo.\n\n' >&2
+        exit 1
+    fi
+    [[ -n "${DBM_STARTED_LABEL:-}" ]] \
+        && printf '  \033[38;5;245miniciando: %s\033[0m\n' "$DBM_STARTED_LABEL" >&2
+
+    # Aguarda o daemon ficar disponível, com feedback animado.
+    # Docker Desktop demora bem mais (precisa subir VM); engine ~5s.
+    local timeout=60
+    [[ "$DBM_STARTED_LABEL" == "Docker Desktop" ]] && timeout=90
+    local total=$(( timeout * 2 )) i frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    for ((i=0; i<total; i++)); do
+        if docker info >/dev/null 2>&1; then
+            printf '\r  \033[38;5;120m✓\033[0m  Docker pronto.                                    \n\n' >&2
+            return 0
+        fi
+        printf '\r  \033[38;5;179m%s\033[0m  aguardando daemon ficar pronto (%ds/%ds)...   ' \
+            "${frames[i % 10]}" "$((i / 2))" "$timeout" >&2
+        sleep 0.5
+    done
+
+    printf '\n\n  \033[38;5;203m✖\033[0m  Daemon não respondeu em %ds.\n      Tente: docker info\n\n' "$timeout" >&2
+    exit 1
 }
 
 # ─── Trap de saída limpa ─────────────────────────────────────────────────────

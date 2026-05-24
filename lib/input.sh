@@ -158,8 +158,6 @@ input::choose() {
 
     # Fallback: menu numérico
     printf '\n'
-    local i
-    for i in "${!@}"; do :; done
     local idx=1
     for item in "$@"; do
         printf '  %s%s%2d%s %s%s%s %s%s%s\n' \

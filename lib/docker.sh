@@ -91,6 +91,38 @@ docker::_cleanup() {
 }
 trap 'docker::_cleanup' EXIT
 
+# ─── Contexto do CLI (default vs desktop-linux etc) ──────────────────────────
+# O CLI do docker pode falar com daemons diferentes (engine systemd, Docker
+# Desktop, hosts remotos). Aqui expomos consulta/troca + invalidação de caches.
+_DOCK_CTX_CACHED=""
+
+docker::context_current() {
+    [[ -z "$_DOCK_CTX_CACHED" ]] && _DOCK_CTX_CACHED=$(docker context show 2>/dev/null)
+    printf '%s' "$_DOCK_CTX_CACHED"
+}
+
+# Lista nomes de contextos (um por linha)
+docker::context_list() {
+    docker context ls --format '{{.Name}}' 2>/dev/null
+}
+
+# Linha descritiva pra UI: "name → endpoint"
+docker::context_describe() {
+    local name=$1
+    docker context inspect "$name" --format '{{.Endpoints.docker.Host}}' 2>/dev/null
+}
+
+# Troca o contexto e invalida todos os caches dependentes do daemon
+docker::context_use() {
+    local name=$1
+    docker context use "$name" >/dev/null 2>&1 || return 1
+    _DOCK_CTX_CACHED="$name"
+    docker::ps_invalidate
+    _DOCK_STATS_TS=0
+    _DOCK_STATS_MAP=()
+    return 0
+}
+
 # ─── Helpers de portas ───────────────────────────────────────────────────────
 # Detecta se uma porta TCP no host está ocupada por OUTRO processo
 docker::port_in_use() {

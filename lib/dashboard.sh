@@ -18,8 +18,11 @@ dashboard::_render() {
 
     # Banner ASCII personalizado no topo
     ui::banner
-    printf '  %s%sgestão elegante de containers PostgreSQL · MySQL · Oracle · SQL Server%s\n\n' \
+    printf '  %s%sgestão elegante de containers PostgreSQL · MySQL · Oracle · SQL Server%s\n' \
         "$DIM$CLR_MUTED" "" "$NC"
+    local _ctx; _ctx=$(docker::context_current)
+    printf '  %scontexto docker:%s %s%s%s\n\n' \
+        "$DIM$CLR_MUTED" "$NC" "$BOLD$CLR_ACCENT" "${_ctx:-?}" "$NC"
 
     # Atualiza stats em batch
     docker::_refresh_stats
@@ -76,6 +79,7 @@ dashboard::_render() {
         "e" "exec" \
         "l" "logs" \
         "d" "delete" \
+        "c" "contexto" \
         "q" "sair"
 
     printf '\n  %s%sseleção: %s%s%s%s\n' \
@@ -105,6 +109,51 @@ dashboard::_run_action() {
             ;;
     esac
     ui::pause
+}
+
+# ─── Seletor de contexto do docker ───────────────────────────────────────────
+# Lista os contextos disponíveis e troca o ativo. Útil quando o usuário tem
+# Docker Engine (default) e Docker Desktop (desktop-linux) coexistindo.
+dashboard::_pick_context() {
+    core::altscreen_off
+    core::show_cursor
+    core::cls
+    ui::banner
+    printf '\n'
+
+    local current; current=$(docker::context_current)
+    printf '  %scontexto atual:%s %s%s%s   %s%s%s\n\n' \
+        "$DIM$CLR_MUTED" "$NC" "$BOLD$CLR_ACCENT" "${current:-?}" "$NC" \
+        "$DIM$CLR_MUTED" "$(docker::context_describe "$current")" "$NC"
+
+    local -a ctxs=()
+    local line
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && ctxs+=("$line")
+    done < <(docker::context_list)
+
+    if (( ${#ctxs[@]} == 0 )); then
+        ui::error "Nenhum contexto do docker encontrado."
+    elif (( ${#ctxs[@]} == 1 )); then
+        ui::info "Só há um contexto: ${BOLD}${ctxs[0]}${NC}. Nada para trocar."
+    elif input::choose "Trocar para qual contexto?" "${ctxs[@]}"; then
+        if [[ "$REPLY_CHOICE" == "$current" ]]; then
+            ui::info "Já está em '${BOLD}$REPLY_CHOICE${NC}'."
+        elif docker::context_use "$REPLY_CHOICE"; then
+            ui::ok "Contexto trocado para ${BOLD}$REPLY_CHOICE${NC}."
+            if ! docker info >/dev/null 2>&1; then
+                ui::warn "Daemon desse contexto não respondeu a 'docker info'."
+                ui::muted "Verifique se o serviço/app correspondente está rodando."
+            fi
+        else
+            ui::error "Falha ao trocar para '$REPLY_CHOICE'."
+        fi
+    fi
+
+    ui::pause
+    core::hide_cursor
+    core::altscreen_on
+    core::cls
 }
 
 # ─── Splash inicial (banner uma vez) ─────────────────────────────────────────
@@ -147,6 +196,7 @@ dashboard::run() {
             e) core::show_cursor; dashboard::_run_action exec    "${DB_TYPES[$selected]}"; core::hide_cursor ;;
             d) core::show_cursor; dashboard::_run_action delete  "${DB_TYPES[$selected]}"; core::hide_cursor ;;
             m|ENTER|RIGHT) core::show_cursor; dashboard::_run_action manage  "${DB_TYPES[$selected]}"; core::hide_cursor ;;
+            c|C) dashboard::_pick_context ;;
             q|Q|ESC) break ;;
             *) ;;  # ignora desconhecida
         esac
