@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# config.sh — sobrescritas de configuração do dbm.
+#
+# Este arquivo é OPCIONAL. Os defaults estão embutidos nos módulos de
+# databases/*.sh; o que você definir aqui sobrescreve.
+#
+# Para usar:
+#   1. Copie este arquivo para ~/.config/dbm/config.sh
+#      (mkdir -p ~/.config/dbm && cp etc/config.sh.example ~/.config/dbm/config.sh)
+#   2. Edite os valores conforme necessário.
+#   3. O dbm carrega automaticamente na próxima execução.
+#
+# Nada aqui deve ser versionado em repositório público — senhas vivem aqui.
+
+# ─── PostgreSQL ──────────────────────────────────────────────────────────────
+DBM_POSTGRES_IMAGE="postgres:16"
+DBM_POSTGRES_PORT="5432"
+DBM_POSTGRES_USER="postgres"
+DBM_POSTGRES_PASSWORD="postgres"
+DBM_POSTGRES_DB="devdb"
+
+# ─── MySQL ───────────────────────────────────────────────────────────────────
+DBM_MYSQL_IMAGE="mysql:8"
+DBM_MYSQL_PORT="3306"
+DBM_MYSQL_ROOT_PASSWORD="Root@123"
+DBM_MYSQL_DB="devdb"
+
+# ─── Oracle XE ───────────────────────────────────────────────────────────────
+DBM_ORACLE_IMAGE="gvenzl/oracle-xe:21"
+DBM_ORACLE_PORT="1521"
+DBM_ORACLE_PASSWORD="oracle"
+
+# ─── SQL Server ──────────────────────────────────────────────────────────────
+DBM_SQLSERVER_IMAGE="mcr.microsoft.com/mssql/server:2022-latest"
+DBM_SQLSERVER_PORT="1433"
+DBM_SQLSERVER_SA_PASSWORD="SqlServer@123"
+
+# ─── Comportamento do app ────────────────────────────────────────────────────
+# Intervalo de auto-refresh do dashboard, em segundos
+DBM_REFRESH="2"
+# TTL do cache de docker ps (segundos)
+DBM_CACHE_TTL="2"
+# Desliga animações (spinners, fade-in). Útil em terminais lentos.
+# DBM_NO_ANIM="1"

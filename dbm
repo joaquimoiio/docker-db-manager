@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# dbm — entrypoint. Boota o app, processa CLI ou abre o dashboard.
+#
+# Estrutura:
+#   lib/core.sh         bootstrap, capacidades, traps
+#   lib/theme.sh        paleta + glifos
+#   lib/ui.sh           primitivas visuais (panel, table, keybar, spinner)
+#   lib/input.sh        leitura de input (single-key, prompts, fzf opcional)
+#   lib/docker.sh       wrappers e cache de docker ps/stats
+#   lib/lifecycle.sh    start/stop/restart/delete/exec
+#   lib/logs.sh         logs (tail + follow)
+#   lib/stats.sh        view de CPU/MEM
+#   lib/volumes.sh      volumes
+#   lib/networks.sh     networks
+#   lib/manage.sh       menu de gerenciamento (bancos · usuários · restore)
+#   lib/dashboard.sh    view principal interativa
+#   databases/_common.sh
+#   databases/*.sh      um módulo por SGBD
+#
+# Para adicionar um novo SGBD: criar databases/<nome>.sh seguindo o
+# contrato (<db>_create_container, <db>_show_credentials, <db>_shell_cmd,
+# <db>_list_databases, ...) e adicionar o nome em DB_TYPES abaixo.
+
+set -uo pipefail
+
+# ─── Bootstrap ───────────────────────────────────────────────────────────────
+DBM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export DBM_ROOT
+
+source "$DBM_ROOT/lib/theme.sh"
+source "$DBM_ROOT/lib/core.sh"
+source "$DBM_ROOT/lib/ui.sh"
+source "$DBM_ROOT/lib/input.sh"
+source "$DBM_ROOT/lib/docker.sh"
+source "$DBM_ROOT/lib/lifecycle.sh"
+source "$DBM_ROOT/lib/logs.sh"
+source "$DBM_ROOT/lib/stats.sh"
+source "$DBM_ROOT/lib/volumes.sh"
+source "$DBM_ROOT/lib/networks.sh"
+source "$DBM_ROOT/lib/manage.sh"
+source "$DBM_ROOT/lib/dashboard.sh"
+
+# ─── Config do usuário ───────────────────────────────────────────────────────
+# Cria ~/.config/dbm/config.sh a partir do template na primeira execução.
+if [[ ! -f "$DBM_USER_CFG" ]]; then
+    core::ensure_dir "$DBM_USER_CFG_DIR"
+    if [[ -f "$DBM_ETC/config.sh.example" ]]; then
+        cp "$DBM_ETC/config.sh.example" "$DBM_USER_CFG"
+        chmod 600 "$DBM_USER_CFG"
+    fi
+fi
+# shellcheck disable=SC1090
+[[ -f "$DBM_USER_CFG" ]] && source "$DBM_USER_CFG"
+
+# ─── Pré-flight + carregamento de módulos de DB ──────────────────────────────
+core::require_docker
+
+# Ordem aqui = ordem no dashboard.
+DB_TYPES=(postgres mysql oracle sqlserver)
+
+# shellcheck source=databases/_common.sh
+source "$DBM_DB_DIR/_common.sh"
+for db in "${DB_TYPES[@]}"; do
+    module="$DBM_DB_DIR/$db.sh"
+    if [[ ! -f "$module" ]]; then
+        ui::error "Módulo ausente: $module"
+        exit 1
+    fi
+    # shellcheck disable=SC1090
+    source "$module"
+done
+
+# ─── CLI ─────────────────────────────────────────────────────────────────────
+is_known_db() {
+    local db=$1 known
+    for known in "${DB_TYPES[@]}"; do [[ "$db" == "$known" ]] && return 0; done
+    return 1
+}
+
+usage() {
+    ui::banner
+    cat <<EOF
+  ${BOLD}${CLR_FG}USO${NC}
+    ${BOLD}${CLR_ACCENT}dbm${NC}                              dashboard interativo (padrão)
+    ${BOLD}${CLR_ACCENT}dbm${NC} ${CLR_FG}<ação> [banco]${NC}             ação direta (sem UI)
+    ${BOLD}${CLR_ACCENT}dbm${NC} ${CLR_FG}help${NC}                         esta ajuda
+
+  ${BOLD}${CLR_FG}AÇÕES POR BANCO${NC}
+    ${CLR_OK}start${NC}    <banco>              iniciar container
+    ${CLR_WARN}stop${NC}     <banco>              parar
+    ${CLR_INFO}restart${NC}  <banco>              reiniciar
+    ${CLR_ERR}delete${NC}   <banco>              remover (destrutivo)
+    ${CLR_ACCENT}logs${NC}     <banco> [N=50]      últimas N linhas
+    ${CLR_ACCENT}follow${NC}   <banco>              follow logs (Ctrl-C sai)
+    ${CLR_ACCENT}exec${NC}     <banco>              abrir cliente do banco (psql/mysql/...)
+
+  ${BOLD}${CLR_FG}DOCKER GERAL${NC}
+    ${CLR_ACCENT}status${NC}                          tabela com status de todos
+    ${CLR_ACCENT}stats${NC}                           snapshot de CPU/MEM
+    ${CLR_ACCENT}volumes${NC}                         listar volumes
+    ${CLR_ACCENT}networks${NC}                        listar networks
+
+  ${BOLD}${CLR_FG}BANCOS DISPONÍVEIS${NC}
+EOF
+    local db label color glyph
+    for db in "${DB_TYPES[@]}"; do
+        label=$(core::db_config "$db" LABEL)
+        color=$(db_color "$db")
+        glyph=$(db_glyph "$db")
+        printf '    %s%s%s %-12s%s %s%s%s\n' \
+            "$color" "$BOLD$glyph" "$NC" \
+            "$db" "$NC" \
+            "$DIM$CLR_MUTED" "$label" "$NC"
+    done
+    cat <<EOF
+
+  ${BOLD}${CLR_FG}CONFIG${NC}
+    arquivo de config: ${DIM}${CLR_MUTED}${DBM_USER_CFG}${NC}
+    backups:           ${DIM}${CLR_MUTED}${DBM_BACKUP_DIR}/<banco>/${NC}
+
+EOF
+}
+
+# Ação "status" simplificada para CLI (não abre dashboard)
+cli_status() {
+    ui::titlebar "Status dos containers" "snapshot"
+    ui::table_header "BANCO" 14 "STATUS" 14 "PORTA" 9 "CONTAINER" 24
+    local db name port label color state pill
+    for db in "${DB_TYPES[@]}"; do
+        name=$(core::db_config "$db" CONTAINER)
+        port=$(core::db_config "$db" PORT)
+        label=$(core::db_config "$db" LABEL)
+        color=$(db_color "$db")
+        state=$(docker::state "$name")
+        case "$state" in
+            running) pill="${CLR_OK}${BOLD}${GLYPH_DOT} rodando${NC}" ;;
+            exited|created|paused) pill="${CLR_WARN}${BOLD}${GLYPH_SQUARE} parado${NC}" ;;
+            *) pill="${DIM}${CLR_MUTED}${GLYPH_RING} ausente${NC}" ;;
+        esac
+        ui::table_row \
+            "${color}${BOLD}${label}${NC}" 14 \
+            "$pill" 14 \
+            "${CLR_FG}:${port}${NC}" 9 \
+            "${CLR_FG}$name${NC}" 24
+    done
+    printf '\n'
+}
+
+main() {
+    # Sem args → dashboard interativo
+    if (( $# == 0 )); then
+        dashboard::run
+        return
+    fi
+
+    local action=$1; shift || true
+
+    case "$action" in
+        -h|--help|help)
+            usage
+            ;;
+        status)
+            cli_status
+            ;;
+        stats)
+            stats::view
+            ;;
+        volumes)
+            volumes::list
+            ;;
+        networks)
+            networks::list
+            ;;
+        start|stop|restart|delete|exec)
+            local db=${1:-}
+            if ! is_known_db "$db"; then
+                ui::error "Banco desconhecido: '${db:-vazio}'. Use: ${DB_TYPES[*]}"
+                exit 2
+            fi
+            case "$action" in
+                start)   lifecycle::start   "$db" ;;
+                stop)    lifecycle::stop    "$db" ;;
+                restart) lifecycle::restart "$db" ;;
+                delete)  lifecycle::delete  "$db" ;;
+                exec)    lifecycle::exec    "$db" ;;
+            esac
+            ;;
+        logs)
+            local db=${1:-} n=${2:-50}
+            is_known_db "$db" || { ui::error "Banco desconhecido: '${db:-vazio}'."; exit 2; }
+            logs::tail "$db" "$n"
+            ;;
+        follow)
+            local db=${1:-}
+            is_known_db "$db" || { ui::error "Banco desconhecido: '${db:-vazio}'."; exit 2; }
+            logs::follow "$db"
+            ;;
+        *)
+            ui::error "Ação inválida: '$action'"
+            usage
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

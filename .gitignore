@@ -1,0 +1,31 @@
+# Backups locais (podem ter dados sensíveis)
+backups/*/*.sql
+backups/*/*.dump
+backups/*/*.bak
+backups/*/*.dmp
+backups/**/*.gz
+
+# Config local do usuário (contém senhas)
+config.sh
+.env
+.env.*
+
+# Logs
+*.log
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporários
+*.tmp
+*.bak
+.cache/
