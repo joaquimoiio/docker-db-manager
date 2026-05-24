@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# dashboard.sh — view principal interativa com auto-refresh e navegação
-# single-key estilo lazydocker. Sai do alt-screen quando ações precisam de TTY
-# bruto (logs -f, exec).
+# dashboard.sh — view principal interativa com navegação single-key estilo
+# lazydocker. Redesenha somente em resposta a tecla (sem auto-refresh).
+# Sai do alt-screen quando ações precisam de TTY bruto (logs -f, exec).
 
 [[ -n "${_DBM_DASH_LOADED:-}" ]] && return 0
 _DBM_DASH_LOADED=1
@@ -15,20 +15,14 @@ _DBM_DASH_LOADED=1
 : "${_DBM_NETWORKS_LOADED:?}"
 : "${_DBM_INPUT_LOADED:?}"
 
-# Intervalo (segundos) entre redraws automáticos no modo idle
-DBM_REFRESH=${DBM_REFRESH:-2}
-
 # ─── Render principal ────────────────────────────────────────────────────────
 dashboard::_render() {
     local selected=$1
-    local cols; cols=$(core::term_cols)
 
-    # Cabeçalho compacto (sem reimprimir banner ASCII a cada refresh)
-    printf '  %s%sDB Manager%s  %s· gestão de containers de banco%s\n' \
-        "$BOLD" "$CLR_FG" "$NC" "$DIM$CLR_MUTED" "$NC"
-    printf '  %s%s%s\n' "$CLR_ACCENT2" \
-        "$(ui::_repeat "$BOX_H" $(( cols > 80 ? 76 : cols - 4 )))" "$NC"
-    printf '\n'
+    # Banner ASCII personalizado no topo
+    ui::banner
+    printf '  %s%sgestão elegante de containers PostgreSQL · MySQL · Oracle · SQL Server%s\n\n' \
+        "$DIM$CLR_MUTED" "" "$NC"
 
     # Atualiza stats em batch
     docker::_refresh_stats
@@ -94,9 +88,10 @@ dashboard::_render() {
         "?" "ajuda" \
         "q" "sair"
 
-    printf '\n  %s%sauto-refresh %ss · seleção: %s%s\n' \
-        "$DIM$CLR_MUTED" "$GLYPH_BULLET " "$DBM_REFRESH" \
-        "${DB_TYPES[$selected]}" "$NC"
+    printf '\n  %s%sseleção: %s · %sR%s%s força refresh%s\n' \
+        "$DIM$CLR_MUTED" "$GLYPH_BULLET " \
+        "${DB_TYPES[$selected]}" \
+        "$BOLD$CLR_ACCENT" "$NC" "$DIM$CLR_MUTED" "$NC"
 }
 
 # ─── Helper de ação ──────────────────────────────────────────────────────────
@@ -158,11 +153,12 @@ dashboard::_help() {
     N                 networks
 
   ${BOLD}${CLR_ACCENT}OUTROS${NC}
+    R                 forçar refresh (recarrega ps/stats do docker)
     ?                 esta ajuda
     q  ou  ESC        sair
 
-  ${DIM}${CLR_MUTED}O dashboard auto-atualiza a cada ${DBM_REFRESH}s.
-  Defina DBM_REFRESH=5 para mudar o intervalo, ou DBM_NO_ANIM=1 para desligar animações.${NC}
+  ${DIM}${CLR_MUTED}O dashboard só redesenha quando você aperta uma tecla — tela estável.
+  Use DBM_NO_ANIM=1 para desligar animações.${NC}
 EOF
     ui::pause
 }
@@ -190,9 +186,7 @@ dashboard::run() {
         core::clear_below
         dashboard::_render "$selected"
 
-        if ! input::read_key_timeout "$DBM_REFRESH"; then
-            continue   # timeout = só refresh
-        fi
+        input::read_key
         k=$REPLY_KEY
 
         case "$k" in

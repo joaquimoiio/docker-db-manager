@@ -36,9 +36,9 @@ DBM_SQLSERVER_PORT="1433"
 DBM_SQLSERVER_SA_PASSWORD="SqlServer@123"
 
 # ─── Comportamento do app ────────────────────────────────────────────────────
-# Intervalo de auto-refresh do dashboard, em segundos
-DBM_REFRESH="2"
-# TTL do cache de docker ps (segundos)
+# TTL do cache de docker ps (segundos) — usado pra evitar chamadas duplicadas
+# em ações encadeadas. O dashboard só redesenha em resposta a tecla, então
+# este TTL afeta apenas a frescura dos dados quando você navega rápido.
 DBM_CACHE_TTL="2"
 # Desliga animações (spinners, fade-in). Útil em terminais lentos.
 # DBM_NO_ANIM="1"
