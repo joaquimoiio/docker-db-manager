@@ -122,6 +122,40 @@ core::_find_working_context() {
     return 1
 }
 
+# Aguarda o daemon do contexto atual ficar disponível com spinner animado.
+# $1 = label amigável (ex: "Docker Desktop"); $2 = timeout em segundos (opcional).
+# Retorna 0 se o daemon respondeu, 1 se esgotou o tempo.
+core::_wait_docker_ready() {
+    local label=${1:-"Docker"} timeout=${2:-60}
+    local total=$(( timeout * 2 )) i frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    for ((i=0; i<total; i++)); do
+        if docker info >/dev/null 2>&1; then
+            printf '\r  \033[38;5;120m✓\033[0m  %s pronto.                                    \n\n' "$label" >&2
+            return 0
+        fi
+        printf '\r  \033[38;5;179m%s\033[0m  aguardando %s ficar pronto (%ds/%ds)...   ' \
+            "${frames[i % 10]}" "$label" "$((i / 2))" "$timeout" >&2
+        sleep 0.5
+    done
+    printf '\n\n  \033[38;5;203m✖\033[0m  %s não respondeu em %ds.\n      Tente: docker info\n\n' "$label" "$timeout" >&2
+    return 1
+}
+
+# Tenta iniciar o daemon do contexto atual e aguarda responder.
+# Retorna 0 se o daemon ficou disponível, 1 caso contrário.
+# Não chama exit — o chamador decide o que fazer.
+core::start_docker_for_context() {
+    printf '\n  \033[38;5;179m⟳\033[0m  daemon do Docker inacessível — tentando iniciar...\n' >&2
+    if ! core::_start_docker_daemon 2>/dev/null; then
+        return 1
+    fi
+    local label="${DBM_STARTED_LABEL:-Docker}"
+    printf '  \033[38;5;245miniciando: %s\033[0m\n' "$label" >&2
+    local timeout=60
+    [[ "$label" == "Docker Desktop" ]] && timeout=90
+    core::_wait_docker_ready "$label" "$timeout"
+}
+
 core::require_docker() {
     if ! core::has_cmd docker; then
         printf '\n  \033[38;5;203m✖\033[0m  docker não encontrado no PATH.\n\n' >&2
@@ -131,7 +165,13 @@ core::require_docker() {
         return 0
     fi
 
-    # Antes de mexer no daemon: pode ser só contexto errado (Desktop parado).
+    # Daemon não responde. Tenta iniciar antes de sugerir troca de contexto.
+    if core::start_docker_for_context; then
+        return 0
+    fi
+
+    # Não conseguiu iniciar o daemon do contexto atual.
+    # Verifica se outro contexto já está respondendo (ex: engine enquanto Desktop está parado).
     local alt
     if alt=$(core::_find_working_context); then
         local cur; cur=$(docker context show 2>/dev/null)
@@ -141,30 +181,7 @@ core::require_docker() {
         exit 1
     fi
 
-    printf '\n  \033[38;5;179m⟳\033[0m  daemon do Docker inacessível — tentando iniciar...\n' >&2
-    if ! core::_start_docker_daemon 2>/dev/null; then
-        printf '\n  \033[38;5;203m✖\033[0m  Não foi possível iniciar o serviço do Docker. Suba manualmente e tente de novo.\n\n' >&2
-        exit 1
-    fi
-    [[ -n "${DBM_STARTED_LABEL:-}" ]] \
-        && printf '  \033[38;5;245miniciando: %s\033[0m\n' "$DBM_STARTED_LABEL" >&2
-
-    # Aguarda o daemon ficar disponível, com feedback animado.
-    # Docker Desktop demora bem mais (precisa subir VM); engine ~5s.
-    local timeout=60
-    [[ "$DBM_STARTED_LABEL" == "Docker Desktop" ]] && timeout=90
-    local total=$(( timeout * 2 )) i frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    for ((i=0; i<total; i++)); do
-        if docker info >/dev/null 2>&1; then
-            printf '\r  \033[38;5;120m✓\033[0m  Docker pronto.                                    \n\n' >&2
-            return 0
-        fi
-        printf '\r  \033[38;5;179m%s\033[0m  aguardando daemon ficar pronto (%ds/%ds)...   ' \
-            "${frames[i % 10]}" "$((i / 2))" "$timeout" >&2
-        sleep 0.5
-    done
-
-    printf '\n\n  \033[38;5;203m✖\033[0m  Daemon não respondeu em %ds.\n      Tente: docker info\n\n' "$timeout" >&2
+    printf '\n  \033[38;5;203m✖\033[0m  Não foi possível iniciar o serviço do Docker. Suba manualmente e tente de novo.\n\n' >&2
     exit 1
 }
 

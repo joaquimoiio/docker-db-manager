@@ -142,8 +142,7 @@ dashboard::_pick_context() {
         elif docker::context_use "$REPLY_CHOICE"; then
             ui::ok "Contexto trocado para ${BOLD}$REPLY_CHOICE${NC}."
             if ! docker info >/dev/null 2>&1; then
-                ui::warn "Daemon desse contexto não respondeu a 'docker info'."
-                ui::muted "Verifique se o serviço/app correspondente está rodando."
+                core::start_docker_for_context || true
             fi
         else
             ui::error "Falha ao trocar para '$REPLY_CHOICE'."
