@@ -65,27 +65,25 @@ for db in "${DB_TYPES[@]}"; do
 done
 
 # ─── Filtra por arquitetura do host ──────────────────────────────────────────
-# Esconde da lista os bancos sem imagem nativa para a arquitetura atual (ex.:
-# Oracle XE e SQL Server num Mac ARM). Cada módulo declara <DB>_ARCHS.
-# Override: DBM_SHOW_ALL_DBS=1 mostra todos (rodam emulados via QEMU).
-if [[ "${DBM_SHOW_ALL_DBS:-0}" != "1" ]]; then
-    case "$(uname -m)" in
-        arm64|aarch64) host_arch="arm64" ;;
-        x86_64|amd64)  host_arch="amd64" ;;
-        *)             host_arch="" ;;
-    esac
-    if [[ -n "$host_arch" ]]; then
-        supported=()
-        for db in "${DB_TYPES[@]}"; do
-            archs_var="${db^^}_ARCHS"
-            archs="${!archs_var:-amd64 arm64}"
-            [[ " $archs " == *" $host_arch "* ]] && supported+=("$db")
-        done
-        DB_TYPES=("${supported[@]}")
-        unset supported archs_var archs
+# DB_TYPES_ALL = todos os módulos carregados. DB_TYPES = o que está visível.
+# Por padrão escondemos bancos sem imagem nativa para a arquitetura atual (ex.:
+# Oracle XE e SQL Server num Mac ARM). O dashboard pode alternar com a tecla 'a'
+# (ou DBM_SHOW_ALL_DBS=1 no config / ambiente) para mostrar todos — nesse caso
+# os incompatíveis rodam emulados via QEMU.
+DB_TYPES_ALL=("${DB_TYPES[@]}")
+
+dbm::apply_db_filter() {
+    if [[ "${DBM_SHOW_ALL_DBS:-0}" == "1" ]]; then
+        DB_TYPES=("${DB_TYPES_ALL[@]}")
+        return
     fi
-    unset host_arch
-fi
+    local db visible=()
+    for db in "${DB_TYPES_ALL[@]}"; do
+        core::db_runs_here "$db" && visible+=("$db")
+    done
+    DB_TYPES=("${visible[@]}")
+}
+dbm::apply_db_filter
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 is_known_db() {

@@ -202,5 +202,25 @@ core::db_config() {
     printf '%s' "${!var}"
 }
 
+# ─── Arquitetura do host / compatibilidade de imagem ─────────────────────────
+# core::host_arch → "arm64" | "amd64" | "" (desconhecida)
+core::host_arch() {
+    case "$(uname -m)" in
+        arm64|aarch64) printf 'arm64' ;;
+        x86_64|amd64)  printf 'amd64' ;;
+        *)             printf '' ;;
+    esac
+}
+
+# core::db_runs_here <db> → rc 0 se a imagem do banco tem build nativo para a
+# arquitetura atual. Cada módulo declara <DB>_ARCHS (default: amd64 arm64).
+core::db_runs_here() {
+    local db=$1 arch; arch=$(core::host_arch)
+    [[ -z "$arch" ]] && return 0
+    local var="${db^^}_ARCHS"
+    local archs="${!var:-amd64 arm64}"
+    [[ " $archs " == *" $arch "* ]]
+}
+
 # ─── Helpers de arquivo ──────────────────────────────────────────────────────
 core::ensure_dir() { [[ -d "$1" ]] || mkdir -p "$1"; }

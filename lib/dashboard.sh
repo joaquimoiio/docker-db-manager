@@ -70,6 +70,12 @@ dashboard::_render() {
     done
 
     # Keybar — atalhos contextuais para a linha selecionada
+    local arch_label
+    if [[ "${DBM_SHOW_ALL_DBS:-0}" == "1" ]]; then
+        arch_label="só compatíveis"
+    else
+        arch_label="mostrar todos"
+    fi
     ui::keybar \
         "↑↓/jk" "navegar" \
         "ENTER" "gerenciar" \
@@ -79,12 +85,18 @@ dashboard::_render() {
         "e" "exec" \
         "l" "logs" \
         "d" "delete" \
+        "a" "$arch_label" \
         "c" "contexto" \
         "q" "sair"
 
-    printf '\n  %s%sseleção: %s%s%s%s\n' \
+    printf '\n  %s%sseleção: %s%s%s%s' \
         "$DIM$CLR_MUTED" "$GLYPH_BULLET " \
         "$BOLD$CLR_FG" "${DB_TYPES[$selected]}" "$NC" "$NC"
+    if ! core::db_runs_here "${DB_TYPES[$selected]}"; then
+        printf '   %s%s%s imagem só amd64 — roda emulada neste host%s' \
+            "$DIM" "$CLR_WARN" "$GLYPH_WARN" "$NC"
+    fi
+    printf '\n'
 }
 
 # ─── Helper de ação ──────────────────────────────────────────────────────────
@@ -195,6 +207,12 @@ dashboard::run() {
             e) core::show_cursor; dashboard::_run_action exec    "${DB_TYPES[$selected]}"; core::hide_cursor ;;
             d) core::show_cursor; dashboard::_run_action delete  "${DB_TYPES[$selected]}"; core::hide_cursor ;;
             m|ENTER|RIGHT) core::show_cursor; dashboard::_run_action manage  "${DB_TYPES[$selected]}"; core::hide_cursor ;;
+            a|A)
+                if [[ "${DBM_SHOW_ALL_DBS:-0}" == "1" ]]; then DBM_SHOW_ALL_DBS=0; else DBM_SHOW_ALL_DBS=1; fi
+                dbm::apply_db_filter
+                max=$(( ${#DB_TYPES[@]} - 1 ))
+                (( selected > max )) && selected=$max
+                ;;
             c|C) dashboard::_pick_context ;;
             q|Q|ESC) break ;;
             *) ;;  # ignora desconhecida
