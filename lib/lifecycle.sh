@@ -9,52 +9,6 @@ _DBM_LIFECYCLE_LOADED=1
 : "${_DBM_UI_LOADED:?source lib/ui.sh first}"
 : "${_DBM_DOCKER_LOADED:?source lib/docker.sh first}"
 
-# Args de --platform passados aos docker run dos módulos. Resolvido em start.
-DBM_PLATFORM_ARGS=()
-
-# ─── plataforma (arm64 / amd64) ──────────────────────────────────────────────
-# Define DBM_PLATFORM_ARGS conforme escolha do usuário (ou DBM_PLATFORM no
-# config). Vazio = deixa o Docker escolher a arquitetura nativa do host.
-lifecycle::_resolve_platform() {
-    local db=$1
-    DBM_PLATFORM_ARGS=()
-
-    local native
-    case "$(uname -m)" in
-        arm64|aarch64) native="arm64" ;;
-        x86_64|amd64)  native="amd64" ;;
-        *)             native="" ;;
-    esac
-
-    local choice="${DBM_PLATFORM:-}"
-    if [[ -z "$choice" ]]; then
-        ui::info "Arquitetura da imagem para ${BOLD}$(core::db_config "$db" LABEL)${NC}:"
-        input::choose "Plataforma" \
-            "automático — nativo do host (${native:-desconhecido})" \
-            "arm64 — Apple Silicon / ARM" \
-            "amd64 — Intel/AMD (emulado em host ARM)" \
-            || { DBM_PLATFORM_ARGS=(); return 0; }
-        case "$REPLY_CHOICE" in
-            arm64*) choice="arm64" ;;
-            amd64*) choice="amd64" ;;
-            *)      choice="auto"  ;;
-        esac
-    fi
-
-    case "$choice" in
-        arm64) DBM_PLATFORM_ARGS=(--platform linux/arm64) ;;
-        amd64)
-            DBM_PLATFORM_ARGS=(--platform linux/amd64)
-            [[ "$native" == "arm64" ]] && \
-                ui::warn "amd64 em host ARM roda emulado (QEMU) — mais lento."
-            ;;
-        *)     DBM_PLATFORM_ARGS=() ;;   # auto/nativo
-    esac
-
-    (( ${#DBM_PLATFORM_ARGS[@]} > 0 )) && ui::muted "usando --platform linux/$choice"
-    return 0
-}
-
 # ─── start ───────────────────────────────────────────────────────────────────
 lifecycle::start() {
     local db=$1
@@ -79,7 +33,6 @@ lifecycle::start() {
     if docker::exists "$name"; then
         ui::spinner_run "iniciando container '$name'" docker start "$name" >/dev/null
     else
-        lifecycle::_resolve_platform "$db"
         ui::info "Criando container ${BOLD}$name${NC} ($label)..."
         ui::spinner_run "baixando imagem e criando container" "${db}_create_container"
     fi

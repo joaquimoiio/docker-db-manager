@@ -3,6 +3,7 @@
 
 MYSQL_LABEL="MySQL"
 MYSQL_TAGLINE="rápido · confiável · amplamente usado"
+MYSQL_ARCHS="amd64 arm64"   # imagem oficial multi-arch
 MYSQL_CONTAINER="mysql-dev"
 MYSQL_IMAGE="${DBM_MYSQL_IMAGE:-mysql:8}"
 MYSQL_PORT="${DBM_MYSQL_PORT:-3306}"
@@ -11,7 +12,6 @@ MYSQL_DB="${DBM_MYSQL_DB:-devdb}"
 
 mysql_create_container() {
     docker run -d \
-        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$MYSQL_CONTAINER" \
         -e MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
         -e MYSQL_DATABASE="$MYSQL_DB" \

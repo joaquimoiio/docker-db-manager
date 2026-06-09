@@ -35,13 +35,12 @@ DBM_SQLSERVER_IMAGE="mcr.microsoft.com/mssql/server:2022-latest"
 DBM_SQLSERVER_PORT="1433"
 DBM_SQLSERVER_SA_PASSWORD="SqlServer@123"
 
-# ─── Plataforma / arquitetura das imagens ────────────────────────────────────
-# Vazio (default) = o dbm pergunta ao criar cada container (arm64/amd64/auto).
-# Fixe um valor aqui para pular a pergunta:
-#   "arm64" → força --platform linux/arm64
-#   "amd64" → força --platform linux/amd64 (emulado em host ARM)
-#   "auto"  → deixa o Docker escolher a arquitetura nativa do host
-# DBM_PLATFORM="auto"
+# ─── Arquitetura / compatibilidade ───────────────────────────────────────────
+# Por padrão o dbm esconde da lista os bancos sem imagem nativa para a
+# arquitetura do host (ex.: Oracle XE e SQL Server não têm build arm64, então
+# somem num Mac Apple Silicon). Defina como "1" para mostrar todos mesmo assim
+# (vão rodar emulados via QEMU — mais lento e às vezes instável).
+# DBM_SHOW_ALL_DBS="1"
 
 # ─── Comportamento do app ────────────────────────────────────────────────────
 # TTL do cache de docker ps (segundos) — usado pra evitar chamadas duplicadas

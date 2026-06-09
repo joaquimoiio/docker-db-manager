@@ -3,6 +3,7 @@
 
 POSTGRES_LABEL="PostgreSQL"
 POSTGRES_TAGLINE="objeto-relacional · ACID · open source"
+POSTGRES_ARCHS="amd64 arm64"   # imagem oficial multi-arch
 POSTGRES_CONTAINER="postgres-dev"
 POSTGRES_IMAGE="${DBM_POSTGRES_IMAGE:-postgres:16}"
 POSTGRES_PORT="${DBM_POSTGRES_PORT:-5432}"
@@ -12,7 +13,6 @@ POSTGRES_DB="${DBM_POSTGRES_DB:-devdb}"
 
 postgres_create_container() {
     docker run -d \
-        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$POSTGRES_CONTAINER" \
         -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         -e POSTGRES_USER="$POSTGRES_USER" \

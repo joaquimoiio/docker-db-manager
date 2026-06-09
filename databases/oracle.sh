@@ -3,6 +3,7 @@
 
 ORACLE_LABEL="Oracle XE"
 ORACLE_TAGLINE="schema-based · PL/SQL · enterprise · XE 21c"
+ORACLE_ARCHS="amd64"   # Oracle XE 21c só tem build x86_64
 ORACLE_CONTAINER="oracle-dev"
 ORACLE_IMAGE="${DBM_ORACLE_IMAGE:-gvenzl/oracle-xe:21}"
 ORACLE_PORT="${DBM_ORACLE_PORT:-1521}"
@@ -10,7 +11,6 @@ ORACLE_PASSWORD="${DBM_ORACLE_PASSWORD:-oracle}"
 
 oracle_create_container() {
     docker run -d \
-        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$ORACLE_CONTAINER" \
         -e ORACLE_PASSWORD="$ORACLE_PASSWORD" \
         -p "${ORACLE_PORT}:1521" \

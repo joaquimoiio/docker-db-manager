@@ -3,6 +3,7 @@
 
 SQLSERVER_LABEL="SQL Server"
 SQLSERVER_TAGLINE="T-SQL · enterprise · Microsoft · 2022"
+SQLSERVER_ARCHS="amd64"   # imagem mssql/server só tem build x86_64
 SQLSERVER_CONTAINER="sqlserver-dev"
 SQLSERVER_IMAGE="${DBM_SQLSERVER_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}"
 SQLSERVER_PORT="${DBM_SQLSERVER_PORT:-1433}"
@@ -10,7 +11,6 @@ SQLSERVER_SA_PASSWORD="${DBM_SQLSERVER_SA_PASSWORD:-SqlServer@123}"
 
 sqlserver_create_container() {
     docker run -d \
-        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$SQLSERVER_CONTAINER" \
         -e ACCEPT_EULA=Y \
         -e SA_PASSWORD="$SQLSERVER_SA_PASSWORD" \
