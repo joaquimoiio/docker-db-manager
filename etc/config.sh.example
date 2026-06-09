@@ -35,6 +35,14 @@ DBM_SQLSERVER_IMAGE="mcr.microsoft.com/mssql/server:2022-latest"
 DBM_SQLSERVER_PORT="1433"
 DBM_SQLSERVER_SA_PASSWORD="SqlServer@123"
 
+# ─── Plataforma / arquitetura das imagens ────────────────────────────────────
+# Vazio (default) = o dbm pergunta ao criar cada container (arm64/amd64/auto).
+# Fixe um valor aqui para pular a pergunta:
+#   "arm64" → força --platform linux/arm64
+#   "amd64" → força --platform linux/amd64 (emulado em host ARM)
+#   "auto"  → deixa o Docker escolher a arquitetura nativa do host
+# DBM_PLATFORM="auto"
+
 # ─── Comportamento do app ────────────────────────────────────────────────────
 # TTL do cache de docker ps (segundos) — usado pra evitar chamadas duplicadas
 # em ações encadeadas. O dashboard só redesenha em resposta a tecla, então

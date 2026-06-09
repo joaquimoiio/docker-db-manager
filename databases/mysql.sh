@@ -11,6 +11,7 @@ MYSQL_DB="${DBM_MYSQL_DB:-devdb}"
 
 mysql_create_container() {
     docker run -d \
+        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$MYSQL_CONTAINER" \
         -e MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
         -e MYSQL_DATABASE="$MYSQL_DB" \

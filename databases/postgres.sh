@@ -12,6 +12,7 @@ POSTGRES_DB="${DBM_POSTGRES_DB:-devdb}"
 
 postgres_create_container() {
     docker run -d \
+        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$POSTGRES_CONTAINER" \
         -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         -e POSTGRES_USER="$POSTGRES_USER" \

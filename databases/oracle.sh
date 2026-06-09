@@ -10,6 +10,7 @@ ORACLE_PASSWORD="${DBM_ORACLE_PASSWORD:-oracle}"
 
 oracle_create_container() {
     docker run -d \
+        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$ORACLE_CONTAINER" \
         -e ORACLE_PASSWORD="$ORACLE_PASSWORD" \
         -p "${ORACLE_PORT}:1521" \

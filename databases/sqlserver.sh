@@ -10,6 +10,7 @@ SQLSERVER_SA_PASSWORD="${DBM_SQLSERVER_SA_PASSWORD:-SqlServer@123}"
 
 sqlserver_create_container() {
     docker run -d \
+        ${DBM_PLATFORM_ARGS[@]+"${DBM_PLATFORM_ARGS[@]}"} \
         --name "$SQLSERVER_CONTAINER" \
         -e ACCEPT_EULA=Y \
         -e SA_PASSWORD="$SQLSERVER_SA_PASSWORD" \
