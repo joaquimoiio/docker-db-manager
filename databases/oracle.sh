@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Módulo Oracle XE — única instância (SID=XE), schema = banco.
+# Módulo Oracle Free — única instância (SID=FREE, PDB=FREEPDB1), schema = banco.
 
-ORACLE_LABEL="Oracle XE"
-ORACLE_TAGLINE="schema-based · PL/SQL · enterprise · XE 21c"
-ORACLE_ARCHS="amd64"   # Oracle XE 21c só tem build x86_64
+ORACLE_LABEL="Oracle Free"
+ORACLE_TAGLINE="schema-based · PL/SQL · enterprise · 23ai Free"
+ORACLE_ARCHS="amd64 arm64"   # Oracle 23ai Free tem build nativo x86_64 e ARM64
 ORACLE_CONTAINER="oracle-dev"
-ORACLE_IMAGE="${DBM_ORACLE_IMAGE:-gvenzl/oracle-xe:21}"
+ORACLE_IMAGE="${DBM_ORACLE_IMAGE:-gvenzl/oracle-free:23-slim}"
 ORACLE_PORT="${DBM_ORACLE_PORT:-1521}"
 ORACLE_PASSWORD="${DBM_ORACLE_PASSWORD:-oracle}"
+ORACLE_SERVICE="FREEPDB1"   # PDB onde vivem os schemas de usuário
 
 oracle_create_container() {
     docker run -d \
@@ -22,12 +23,13 @@ oracle_create_container() {
 oracle_show_credentials() {
     ui::panel_row "usuário" "system"
     ui::panel_row "senha"   "$ORACLE_PASSWORD"
-    ui::panel_row "SID"     "XE"
+    ui::panel_row "SID"     "FREE"
+    ui::panel_row "service" "$ORACLE_SERVICE"
 }
 
 oracle_shell_cmd() {
     docker exec -it "$ORACLE_CONTAINER" \
-        sqlplus system/"$ORACLE_PASSWORD"@XE
+        sqlplus system/"$ORACLE_PASSWORD"@"$ORACLE_SERVICE"
 }
 
 oracle_start_note() {
@@ -35,13 +37,13 @@ oracle_start_note() {
 }
 
 oracle_manage_note() {
-    printf '  %s%s%s %s%sOracle XE: usuário = schema. Criar usuário = criar banco.%s\n' \
+    printf '  %s%s%s %s%sOracle Free: usuário = schema. Criar usuário = criar banco.%s\n' \
         "$BOLD$CLR_WARN" "$GLYPH_WARN" "$NC" "$ITALIC" "$CLR_FG" "$NC"
 }
 
 oracle_exec() {
     docker exec "$ORACLE_CONTAINER" \
-        sqlplus -S system/"$ORACLE_PASSWORD"@XE <<< "
+        sqlplus -S system/"$ORACLE_PASSWORD"@"$ORACLE_SERVICE" <<< "
 SET PAGESIZE 50
 SET LINESIZE 120
 SET FEEDBACK OFF
@@ -113,7 +115,7 @@ oracle_restore() {
     oracle_setup_backup_dir
     ui::info "Executando impdp — pode demorar alguns minutos..."
     docker exec "$ORACLE_CONTAINER" \
-        impdp system/"$ORACLE_PASSWORD"@XE \
+        impdp system/"$ORACLE_PASSWORD"@"$ORACLE_SERVICE" \
         DIRECTORY=BACKUP_DIR \
         DUMPFILE="$file" \
         REMAP_SCHEMA="${src_schema}:${dst_schema}" \

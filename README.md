@@ -2,7 +2,7 @@
 
 Gerenciador interativo de containers Docker para os principais bancos de dados de desenvolvimento.
 Um dashboard estilo `lazydocker`, escrito em Bash puro, para subir, parar, conectar e inspecionar
-**PostgreSQL**, **MySQL**, **Oracle XE** e **SQL Server** sem precisar lembrar de um único `docker run`.
+**PostgreSQL**, **MySQL**, **Oracle Free** e **SQL Server** sem precisar lembrar de um único `docker run`.
 
 ```
   ╔══════════════════════════════════╗
@@ -21,7 +21,7 @@ Um dashboard estilo `lazydocker`, escrito em Bash puro, para subir, parar, conec
 
 - 🎛️  **Dashboard interativo** com auto-refresh, navegação single-key (estilo `lazydocker`/`k9s`).
 - 🚀 **CLI direta** para scripts: `dbm start postgres`, `dbm logs mysql 100`, `dbm exec oracle`.
-- 📦 **4 SGBDs prontos:** PostgreSQL 16, MySQL 8, Oracle XE 21, SQL Server 2022.
+- 📦 **4 SGBDs prontos:** PostgreSQL 16, MySQL 8, Oracle 23ai Free, SQL Server 2022.
 - 🔌 **Conexão one-shot** ao cliente do banco (psql, mysql, sqlplus, sqlcmd) sem instalar nada local.
 - 📊 **Stats em tempo real:** CPU/MEM por container, status, portas, nomes.
 - 💾 **Backup & restore** integrados em `backups/<banco>/`.
@@ -114,7 +114,7 @@ dbm help
 |------------|-----------|-------|----------|-----------------|-----------|
 | PostgreSQL | localhost | 5432  | postgres | postgres        | devdb     |
 | MySQL      | localhost | 3306  | root     | Root@123        | devdb     |
-| Oracle XE  | localhost | 1521  | system   | oracle          | XE        |
+| Oracle Free| localhost | 1521  | system   | oracle          | FREEPDB1  |
 | SQL Server | localhost | 1433  | sa       | SqlServer\@123  | —         |
 
 > Oracle leva ~60s para inicializar; SQL Server ~30s.
@@ -128,7 +128,7 @@ Use as credenciais da tabela acima — todos os containers expõem `localhost:<p
 ```bash
 dbm exec postgres   # abre psql -U postgres -d devdb
 dbm exec mysql      # abre mysql -u root -p... devdb
-dbm exec oracle     # abre sqlplus system/oracle@XE
+dbm exec oracle     # abre sqlplus system/oracle@FREEPDB1
 dbm exec sqlserver  # abre sqlcmd -S localhost -U sa
 ```
 

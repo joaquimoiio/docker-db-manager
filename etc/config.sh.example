@@ -25,8 +25,8 @@ DBM_MYSQL_PORT="3306"
 DBM_MYSQL_ROOT_PASSWORD="Root@123"
 DBM_MYSQL_DB="devdb"
 
-# ─── Oracle XE ───────────────────────────────────────────────────────────────
-DBM_ORACLE_IMAGE="gvenzl/oracle-xe:21"
+# ─── Oracle Free (23ai) ──────────────────────────────────────────────────────
+DBM_ORACLE_IMAGE="gvenzl/oracle-free:23-slim"
 DBM_ORACLE_PORT="1521"
 DBM_ORACLE_PASSWORD="oracle"
 
@@ -37,7 +37,7 @@ DBM_SQLSERVER_SA_PASSWORD="SqlServer@123"
 
 # ─── Arquitetura / compatibilidade ───────────────────────────────────────────
 # Por padrão o dbm esconde da lista os bancos sem imagem nativa para a
-# arquitetura do host (ex.: Oracle XE e SQL Server não têm build arm64, então
+# arquitetura do host (ex.: SQL Server não tem build arm64, então
 # somem num Mac Apple Silicon). Defina como "1" para mostrar todos mesmo assim
 # (vão rodar emulados via QEMU — mais lento e às vezes instável).
 # DBM_SHOW_ALL_DBS="1"
